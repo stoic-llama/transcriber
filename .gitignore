@@ -1,0 +1,10 @@
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+public/ffmpeg
+test-results
+e2e-output
+*.tsbuildinfo
