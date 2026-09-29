@@ -89,7 +89,15 @@ Upload `dist/`. No server configuration, rewrites or special headers are needed.
 
 **Unit tests** (`npm test`) cover chunk ordering and transcript assembly, retry/backoff, resume (completed chunks skipped, failed ones retried, pending ones continued), per-chunk retry, pause and cancel, job persistence across reconnects, job deletion, crash recovery, mapping OpenAI errors to messages (401/403/404/413/429/quota/5xx/timeout/network/malformed), chunk planning and silence parsing, and fingerprinting. They use `fake-indexeddb` and mocked `fetch`, and make no real API calls.
 
-**Browser smoke test** (`npm run e2e`) runs the built site in Chromium, served under `/transcriber/`. Real ffmpeg.wasm chunks a generated recording, and `api.openai.com` is intercepted and mocked (including a 429 and a 500). The test reloads the page mid-job, resumes, checks that completed chunks aren't sent again, downloads the TXT, checks chunk order and silence-aligned boundaries, checks that no request goes anywhere except the site and OpenAI, and checks that deleting the job empties IndexedDB.
+**Word-loss tests for silence detection and chunking** (`src/media/silenceChunking.test.ts`, part of `npm test`) check that chunking never loses words. Spoken WAV fixtures in [`tests/fixtures/silence/`](tests/fixtures/silence/) each have a hand-written `.txt` ground truth. The recordings are cut at planned boundaries, including deliberately misdetected silences and hard cuts through words, and then "transcribed" by an offline stand-in recogniser that garbles any word a chunk edge cuts through. Missing or substituted words fail the test; extra words, WER and deletions are printed in a report. To run only these tests and see the report:
+
+```bash
+npx vitest run src/media/silenceChunking.test.ts --silent=false
+```
+
+The fixtures are committed. To regenerate them, install eSpeak NG (`apt-get install espeak-ng`) and run `node scripts/generate-silence-fixtures.mjs`. Details are in [`tests/fixtures/silence/README.md`](tests/fixtures/silence/README.md).
+
+**Browser smoke test** (`npm run e2e`) runs the built site in Chromium, served under `/transcriber/`. Real ffmpeg.wasm chunks a generated recording, and `api.openai.com` is intercepted and mocked (including a 429 and a 500). The test reloads the page mid-job, resumes, checks that completed chunks aren't sent again, downloads the TXT, checks chunk order, the 4 s chunk overlap and silence-aligned cuts, checks that no request goes anywhere except the site and OpenAI, and checks that deleting the job empties IndexedDB.
 
 ```bash
 npm run vendor:ffmpeg
