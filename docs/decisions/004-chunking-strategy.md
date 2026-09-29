@@ -1,5 +1,5 @@
 # Decision: Size-derived, silence-aligned chunks of CBR MP3, planned once
-Status: Accepted
+Status: Accepted, amended by [009](009-overlapping-chunks.md) (chunks now overlap around each cut)
 Date: 2026-09-26 (initial commit 3997f5d)
 
 ## Context

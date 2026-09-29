@@ -177,7 +177,7 @@ assert(apiCalls.every((c) => c.bytes < 25 * 1024 * 1024), 'chunks under upload l
 assert(foreignRequests.length === 0, `no requests to other origins: ${foreignRequests.join(', ')}`);
 console.log('upload sizes (bytes):', apiCalls.map((c) => c.bytes).join(', '));
 
-// ---- chunk boundaries were moved to pauses (test audio pauses at t mod 7 in [6, 7)) ----
+// ---- chunks overlap, and each cut was moved to a pause (test audio pauses at t mod 7 in [6, 7)) ----
 const plan = await page.evaluate(
   () =>
     new Promise((resolve) => {
@@ -189,8 +189,14 @@ const plan = await page.evaluate(
     }),
 );
 console.log('chunk plan (s):', JSON.stringify(plan));
-for (const [, end] of checkPauses ? plan.slice(0, -1) : []) {
-  assert(end % 7 >= 6 && end % 7 <= 7, `boundary ${end} falls inside a pause`);
+assert(plan[0][0] === 0, 'first chunk starts at 0');
+for (let i = 1; i < plan.length; i++) {
+  const [start] = plan[i];
+  const [, prevEnd] = plan[i - 1];
+  assert(prevEnd - start >= 4 - 1e-6, `chunks ${i - 1} and ${i} overlap by ${prevEnd - start}s, expected 4s`);
+  // The cut is the middle of the shared audio.
+  const cut = (start + prevEnd) / 2;
+  if (checkPauses) assert(cut % 7 >= 6 && cut % 7 <= 7, `cut ${cut} falls inside a pause`);
 }
 
 // ---- deleting the job removes it from IndexedDB ----

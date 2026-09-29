@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maxChunkSeconds, pickBoundary, planChunks } from './audioChunker';
+import { chunksFromCuts, maxChunkSeconds, pickBoundary, planChunks } from './audioChunker';
 import { parseFfmpegProbe, parseSilenceLog } from './mediaInfo';
 
 describe('maxChunkSeconds', () => {
@@ -27,19 +27,23 @@ describe('pickBoundary', () => {
 });
 
 describe('planChunks', () => {
-  it('covers the whole duration contiguously without exceeding the maximum', async () => {
+  it('covers the whole duration with overlapping chunks no longer than the maximum', async () => {
     const silences = [
-      { start: 590, end: 592 },
-      { start: 1180, end: 1181 },
+      { start: 586, end: 588 },
+      { start: 1170, end: 1171 },
     ];
-    const plan = await planChunks(2 * 3600 + 5, 600, async (s, e) => silences.filter((x) => x.end > s && x.start < e));
-    expect(plan[0]).toEqual({ id: 0, startTime: 0, endTime: 591 });
-    expect(plan[1]).toEqual({ id: 1, startTime: 591, endTime: 1180.5 });
+    const plan = await planChunks(2 * 3600 + 5, 600, async (s, e) => silences.filter((x) => x.end > s && x.start < e), {
+      overlapSeconds: 4,
+    });
+    // Cuts at the middle of each pause (587, 1170.5); chunks reach 2 s past each cut.
+    expect(plan[0]).toEqual({ id: 0, startTime: 0, endTime: 589 });
+    expect(plan[1]).toEqual({ id: 1, startTime: 585, endTime: 1172.5 });
     for (let i = 0; i < plan.length; i++) {
       expect(plan[i].id).toBe(i);
       expect(plan[i].endTime - plan[i].startTime).toBeLessThanOrEqual(600);
-      if (i > 0) expect(plan[i].startTime).toBe(plan[i - 1].endTime);
+      if (i > 0) expect(plan[i - 1].endTime - plan[i].startTime).toBe(4);
     }
+    expect(plan[0].startTime).toBe(0);
     expect(plan.at(-1)?.endTime).toBe(7205);
     expect(plan.length).toBe(13);
   });
@@ -48,15 +52,43 @@ describe('planChunks', () => {
     expect(await planChunks(42, 600, async () => [])).toEqual([{ id: 0, startTime: 0, endTime: 42 }]);
   });
 
-  it('falls back to hard cuts if silence detection fails', async () => {
+  it('falls back to hard cuts if silence detection fails, still overlapping', async () => {
     const plan = await planChunks(1500, 600, async () => {
       throw new Error('ffmpeg crashed');
-    });
+    }, { overlapSeconds: 4 });
     expect(plan.map((c) => [c.startTime, c.endTime])).toEqual([
-      [0, 600],
-      [600, 1200],
-      [1200, 1500],
+      [0, 598],
+      [594, 1194],
+      [1190, 1500],
     ]);
+  });
+
+  it('lets the previous chunk take the rest when a cut lands too close to the end', async () => {
+    // Nominal cut at 596 (600 − 4 s overlap). In a 597 s file that leaves 1 s
+    // after the cut, less than the 2 s the next chunk would need before it.
+    expect(await planChunks(597, 600, async () => [], { overlapSeconds: 4 })).toEqual([
+      { id: 0, startTime: 0, endTime: 597 },
+    ]);
+    expect(await planChunks(597.5, 600, async () => [{ start: 595.5, end: 596 }], { overlapSeconds: 4 })).toEqual([
+      { id: 0, startTime: 0, endTime: 597.5 },
+    ]);
+    // With room for the overlap, it cuts as usual.
+    expect((await planChunks(599, 600, async () => [], { overlapSeconds: 4 })).length).toBe(2);
+  });
+
+  it('rejects an overlap too large for the chunk length', async () => {
+    await expect(planChunks(100, 10, async () => [], { overlapSeconds: 4 })).rejects.toThrow(/too short/);
+  });
+});
+
+describe('chunksFromCuts', () => {
+  it('extends every chunk half the overlap past each cut, clamped to the media', () => {
+    expect(chunksFromCuts([10, 20], 25, 2)).toEqual([
+      { id: 0, startTime: 0, endTime: 11 },
+      { id: 1, startTime: 9, endTime: 21 },
+      { id: 2, startTime: 19, endTime: 25 },
+    ]);
+    expect(chunksFromCuts([], 25, 2)).toEqual([{ id: 0, startTime: 0, endTime: 25 }]);
   });
 });
 

@@ -40,6 +40,15 @@ export const PREFERRED_MAX_CHUNK_SECONDS = 10 * 60;
  * last SILENCE_SEARCH_SECONDS before the nominal boundary.
  */
 export const SILENCE_SEARCH_SECONDS = 30;
+
+/**
+ * Adjacent chunks share this much audio, centred on each cut. Silence detection
+ * can be wrong (noisy recordings, quiet word endings, no pause at all in the
+ * search window), and a word cut in two is lost by both chunks. With the
+ * overlap, any word shorter than this is whole in at least one chunk; the
+ * duplicated words are removed when the transcript is assembled.
+ */
+export const CHUNK_OVERLAP_SECONDS = 4;
 export const SILENCE_NOISE_DB = -35;
 export const SILENCE_MIN_SECONDS = 0.35;
 
